@@ -1,15 +1,36 @@
-
+param([bool]$prerelease, [bool]$local)    
+$version = "2018.05.21.01"
+Write-Host "--- runengine.ps1 version $version ---"
+Write-Host "prerelease flag: $prerelease"
 
 # You can run this by pasting the following in powershell
-# Invoke-WebRequest -useb https://raw.githubusercontent.com/HealthCatalyst/InstallScripts/master/developer/runengine.ps1 | Invoke-Expression;
+# Invoke-WebRequest -useb https://raw.githubusercontent.com/HealthCatalyst/dos.powershell/master/runengine.ps1 | Invoke-Expression;
 # Get-Content ./runengine.ps1 -Raw | Invoke-Expression;
 
-$GITHUB_URL = "https://raw.githubusercontent.com/HealthCatalyst/InstallScripts/master"
+if ($local) {
+    Write-Host "use local files: $local"    
+}
+# stop whenever there is an error
+$ErrorActionPreference = "Stop"
+# show Information messages
+$InformationPreference = "Continue"
 
-# Invoke-WebRequest -useb ${GITHUB_URL}/developer/doslibrary.ps1 | Invoke-Expression;
-Get-Content ./developer/doslibrary.ps1 -Raw | Invoke-Expression;
+if ($prerelease) {
+    $GITHUB_URL = "https://raw.githubusercontent.com/HealthCatalyst/dos.powershell/master"
+}
+else {
+    $GITHUB_URL = "https://raw.githubusercontent.com/HealthCatalyst/dos.powershell/release"
+}
+Write-Host "GITHUB_URL: $GITHUB_URL"
 
-Write-output "--- runengine.ps1 Version 2018.03.14.01 ----"
+if ($local) {
+    Get-Content ./doslibrary.ps1 -Raw | Invoke-Expression;
+}
+else {
+    Invoke-WebRequest -useb ${GITHUB_URL}/doslibrary.ps1?f=$randomstring | Invoke-Expression;    
+}
+
+Write-output "--- runengine.ps1 Version $version ----"
 
 $userinput = ""
 while ($userinput -ne "q") {
