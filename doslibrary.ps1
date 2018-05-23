@@ -3,7 +3,7 @@
 # You can run this by pasting the following in powershell
 # Invoke-WebRequest -useb https://raw.githubusercontent.com/HealthCatalyst/InstallScripts/master/developer/doslibrary.ps1 | Invoke-Expression;
 
-Write-output "--- doslibrary.ps1 Version 2018.04.24.01 ----"
+Write-output "--- doslibrary.ps1 Version 2018.05.22.01 ----"
 
 $dpsUrl = "http://localhost/DataProcessingService"
 $metadataUrl = "http://localhost/MetadataService" 
@@ -417,6 +417,9 @@ function createBatchDefinitionForDataMart([ValidateNotNull()] $datamartName) {
 function createBatchDefinitions() {
     createBatchDefinitionForDataMart -datamartName "HL7Demo"
 
+    createBatchDefinitionForDataMart -datamartName "SharedTerminology"
+    createBatchDefinitionForDataMart -datamartName "Terminology Normalize View"
+    
     createBatchDefinitionForDataMart -datamartName "SharedPersonSourcePatient"
     createBatchDefinitionForDataMart -datamartName "SharedPersonSourceProvider"
     createBatchDefinitionForDataMart -datamartName "SharedPersonProvider"
@@ -436,6 +439,9 @@ function runAndWaitForDatamart([ValidateNotNull()] $datamartName) {
 
     $batchdefinitionId = $(getBatchDefinitionForDataMart -dataMartId $datamartId).BatchDefinitionId
     Write-Host "Running batch definition $batchdefinitionId for datamart $datamartName id: $datamartId"
+    if(!$batchdefinitionId){
+        throw "No batch definition found for datamart $datamartName id: $datamartId"
+    }
     $batchExecutionId = $(executeBatch -batchdefinitionId $batchdefinitionId).BatchExecutionId
     $status = $(waitForBatchExecution -batchExecutionId $batchExecutionId).Status
 
@@ -444,6 +450,8 @@ function runAndWaitForDatamart([ValidateNotNull()] $datamartName) {
 }
 
 function runSharedTerminologyDataMarts() {
+    $result = runAndWaitForDatamart -datamartName "SharedTerminology"
+    if ($($result.Status) -ne "Succeeded") {return; }
     $result = runAndWaitForDatamart -datamartName "Terminology Normalize View"
     if ($($result.Status) -ne "Succeeded") {return; }
 

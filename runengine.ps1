@@ -87,9 +87,11 @@ while ($userinput -ne "q") {
             runHL7Sourcemart
         } 
         '12' {
+            runSharedTerminologyDataMarts
             runSharedDataMarts
         } 
         '13' {
+            runSharedTerminologyDataMarts
             runSharedDataMarts
             runSepsis
         } 
