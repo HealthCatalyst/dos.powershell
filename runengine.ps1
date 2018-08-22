@@ -106,6 +106,9 @@ while ($userinput -ne "q") {
             executeJsonDataMart "./datamart.json"
         } 
         '22' {
+            # ask for datamart name
+            # ask for binding id
+            
             setBindingTypeForPatientRisk "R" $ewsRScriptFile
         } 
         '23' {
@@ -125,7 +128,7 @@ while ($userinput -ne "q") {
             Write-Host "Binding Type: $($result.Binding.BindingType)"
         } 
         '34' {
-            setETLObjectAttributeText "PathToRExecutable" "C:\Program Files\R\R-3.4.3\bin\Rscript.exe"
+            setETLObjectAttributeText "PathToRExecutable" "C:\Program Files\R\R-3.5.0\bin\Rscript.exe"
             setETLObjectAttributeText "PathToRModelFolder" "C:/himss/R"            
         } 
         'q' {

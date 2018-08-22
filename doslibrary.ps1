@@ -6,7 +6,7 @@
 Write-output "--- doslibrary.ps1 Version 2018.05.22.01 ----"
 
 $dpsUrl = "http://localhost/DataProcessingService"
-$metadataUrl = "http://localhost/MetadataService" 
+$metadataUrl = "http://localhost/MetadataService"
 
 $ewSepsisDataMartName = "Early Warning Sepsis Risk"
 $ewSepsisEntityName = "EWSSummaryPatientRisk"
@@ -16,7 +16,7 @@ $connectionString = "Server=(local);Database=EdwAdmin;Trusted_Connection=True;"
 # http://localhost/MetadataService/swagger/ui/index#/
 function listdatamarts() {
     $api = "${metadataUrl}/v1/DataMarts"
-    $result = Invoke-Restmethod $api -UseDefaultCredentials 
+    $result = Invoke-Restmethod $api -UseDefaultCredentials
     Write-Host "Datamarts"
     ForEach ($def in $result.value) {
         Write-Host "$($def.Id) $($def.Name)"
@@ -24,10 +24,10 @@ function listdatamarts() {
 }
 
 function getdataMartIDbyName($datamartName) {
-    [hashtable]$Return = @{} 
+    [hashtable]$Return = @{}
 
     $api = "${metadataUrl}/v1/DataMarts" + '?$filter=Name eq ' + "'$datamartName'"
-    $result = Invoke-Restmethod $api -UseDefaultCredentials 
+    $result = Invoke-Restmethod $api -UseDefaultCredentials
     
 
     $Return.Id = $result.value.Id
@@ -439,7 +439,7 @@ function runAndWaitForDatamart([ValidateNotNull()] $datamartName) {
 
     $batchdefinitionId = $(getBatchDefinitionForDataMart -dataMartId $datamartId).BatchDefinitionId
     Write-Host "Running batch definition $batchdefinitionId for datamart $datamartName id: $datamartId"
-    if(!$batchdefinitionId){
+    if (!$batchdefinitionId) {
         throw "No batch definition found for datamart $datamartName id: $datamartId"
     }
     $batchExecutionId = $(executeBatch -batchdefinitionId $batchdefinitionId).BatchExecutionId
@@ -502,7 +502,7 @@ function runHL7Sourcemart() {
     $(executeBatchAsStreaming -batchdefinitionId $batchdefinitionId).BatchExecutionId
 }
 function runSql([ValidateNotNull()][string] $sql) {
-#    Invoke-Sqlcmd -Query $sql -ConnectionString $connectionString
+    #    Invoke-Sqlcmd -Query $sql -ConnectionString $connectionString
     Invoke-Sqlcmd -Query $sql -Database "EdwAdmin"
 
 }
@@ -575,11 +575,11 @@ function showUserPermissions() {
     }
 }
 
-function setETLObjectAttribute($attributeName, $attributeValueTXT, $attributeValueNBR){
+function setETLObjectAttribute($attributeName, $attributeValueTXT, $attributeValueNBR) {
     [hashtable]$Return = @{} 
 
     $sql =
-@"
+    @"
 IF NOT EXISTS(SELECT 1 FROM [EDWAdmin].[CatalystAdmin].[ETLObjectAttributeBASE] WHERE [AttributeNM] = '$attributeName')
 BEGIN
 	INSERT INTO [EDWAdmin].[CatalystAdmin].[ETLObjectAttributeBASE]([ObjectID], [ObjectTypeCD],[AttributeNM],[AttributeValueTXT],[AttributeValueNBR])
@@ -598,7 +598,7 @@ END
     return $Return
 }
 
-function setETLObjectAttributeText($attributeName, $attributeValueTXT){
+function setETLObjectAttributeText($attributeName, $attributeValueTXT) {
     [hashtable]$Return = @{} 
 
     setETLObjectAttribute "$attributeName" "$attributeValueTXT" "NULL"
@@ -606,7 +606,7 @@ function setETLObjectAttributeText($attributeName, $attributeValueTXT){
 
     return $Return
 }
-function setETLObjectAttributeNumber($attributeName, $attributeValueNBR){
+function setETLObjectAttributeNumber($attributeName, $attributeValueNBR) {
     [hashtable]$Return = @{} 
 
     setETLObjectAttribute "$attributeName" "NULL" $attributeValueNBR
@@ -761,7 +761,171 @@ function downloadArtifactFromLatestBuild() {
     Write-Verbose -Verbose ('Build artifacts extracted into ' + $Env:BUILD_STAGINGDIRECTORY)    
 }
 
-function global:startDockerService(){
+function global:startDockerService() {
     # net start "com.docker.service"
     # "C:\Program Files\Docker\Docker\Docker for Windows.exe"
+}
+
+function setupREnvironment($version, $pathToRScript) {
+    [hashtable]$Return = @{} 
+
+    $sql =
+    @"
+DECLARE @RVersion VARCHAR(32) = '$version';
+DECLARE @RScriptPath VARCHAR(255) = '$pathToRScript';
+
+INSERT INTO EDWAdmin.CatalystAdmin.ETLExecutionEnvironmentBASE (EnvironmentTypeCD, EnvironmentVersionTXT, EnvironmentNameTXT, EnvironmentDescriptionTXT)
+VALUES('R', @RVersion, 'R-' + @RVersion, 'R - ' + @RVersion);
+
+DECLARE @ExecutionEnvironmentID INT;
+SELECT @ExecutionEnvironmentID = MAX(ETLExecutionEnvironmentID) FROM EDWAdmin.CatalystAdmin.ETLExecutionEnvironmentBASE WHERE EnvironmentTypeCD = 'R' AND EnvironmentVersionTXT = @RVersion;
+INSERT INTO EDWAdmin.CatalystAdmin.ETLObjectAttributeBASE (ObjectID, ObjectTypeCD, AttributeNM, AttributeValueTXT)
+VALUES(@ExecutionEnvironmentID, 'Environment', 'RScriptPath', @RScriptPath)
+
+SELECT * FROM EDWAdmin.CatalystAdmin.ETLExecutionEnvironmentBASE;
+SELECT * FROM EDWAdmin.CatalystAdmin.ETLObjectAttributeBASE;
+"@    
+ 
+    runSql $sql
+
+    return $Return
+
+}
+
+function fixRBinding($bindingId, $rVersion, $rScript, $dataframe) {
+    [hashtable]$Return = @{} 
+
+    $sql =
+    @"
+    ----------------------- USER DECLARED VARIABLES -------------------------------------
+    DECLARE @BindingId INT = $bindingId;
+    DECLARE @InstalledRVersion VARCHAR(255) = '$rVersion'; -- Assumes that a record for this version of R has been entered into ETLExecutionEnvironmentBASE
+    DECLARE @OutputDataFrameName VARCHAR(255) = '$dataframe';
+    DECLARE @RScript VARCHAR(MAX) = 
+    '$rScript';
+    
+    DECLARE @SourceEntities AS TABLE (EntityNM VARCHAR(255) -- EntityNM as found in CatalystAdmin.EntityBASE
+                                    , DataFrameNM VARCHAR(255)); -- Data Frame Name as used in R Script above
+    -- Add/remove source entities as needed
+    INSERT INTO @SourceEntities(EntityNM, DataFrameNM) VALUES('AddressFull', 'df.full');
+    INSERT INTO @SourceEntities(EntityNM, DataFrameNM) VALUES('AddressIncremental', 'df.incremental');
+    INSERT INTO @SourceEntities(EntityNM, DataFrameNM) VALUES('AddressWindowed', 'df.windowed');
+    
+    ------------------------ END DECLARE VARIABLES ---------------------------------------
+    
+    -- Set Binding Type to 'R'
+    UPDATE EDWAdmin.CatalystAdmin.BindingBASE 
+    SET BindingTypeNM = 'R' 
+    WHERE BindingID = @BindingId;
+    
+    -- Set Binding Attribute --> ResultDataFrameName
+    UPDATE EDWAdmin.CatalystAdmin.ObjectAttributeBASE
+	SET AttributeValueTXT = @OutputDataFrameName
+	WHERE ObjectID = @BindingId AND ObjectTypeCD = 'Binding' AND AttributeNM = 'ResultDataFrameName'
+
+	IF @@ROWCOUNT=0
+		INSERT INTO EDWAdmin.CatalystAdmin.ObjectAttributeBASE (ObjectID, ObjectTypeCD, AttributeNM, AttributeTypeCD, AttributeValueTXT) 
+		VALUES (@BindingId, 'Binding', 'ResultDataFrameName', 'string', @OutputDataFrameName);
+    
+    -- Set Binding Attribute --> Script
+	UPDATE EDWAdmin.CatalystAdmin.ObjectAttributeBASE
+	SET AttributeValueLongTXT = @RScript
+	WHERE ObjectID = @BindingId AND ObjectTypeCD='Binding' AND AttributeNM='Script'
+
+	IF @@ROWCOUNT=0
+		INSERT INTO EDWAdmin.CatalystAdmin.ObjectAttributeBASE (ObjectID, ObjectTypeCD, AttributeNM, AttributeTypeCD, AttributeValueLongTXT) 
+		VALUES (@BindingId, 'Binding', 'Script', 'longstring', @RScript);
+
+    -- Set Binding Attribute --> ExecutionEnvironment
+    UPDATE EDWAdmin.CatalystAdmin.ObjectAttributeBASE
+	SET AttributeValueNBR = (SELECT ETLExecutionEnvironmentID 
+							FROM EDWAdmin.CatalystAdmin.ETLExecutionEnvironmentBASE 
+							WHERE EnvironmentTypeCD = 'R' AND EnvironmentVersionTXT = @InstalledRVersion)
+	WHERE ObjectID = @BindingId AND ObjectTypeCD='Binding' AND AttributeNM='ExecutionEnvironmentId'
+
+	IF @@ROWCOUNT=0
+		INSERT INTO EDWAdmin.CatalystAdmin.ObjectAttributeBASE (ObjectID, ObjectTypeCD, AttributeNM, AttributeTypeCD, AttributeValueNBR) 
+		VALUES (@BindingId, 'Binding', 'ExecutionEnvironmentId', 'number', (SELECT ETLExecutionEnvironmentID 
+																			FROM EDWAdmin.CatalystAdmin.ETLExecutionEnvironmentBASE 
+																			WHERE EnvironmentTypeCD = 'R' AND EnvironmentVersionTXT = @InstalledRVersion));
+                                                    
+    -- Remove Binding Attribute --> UserDefinedSQL
+    DELETE FROM EDWAdmin.CatalystAdmin.ObjectAttributeBASE WHERE ObjectID = @BindingId AND ObjectTypeCD = 'Binding' AND AttributeNM = 'UserDefinedSQL';
+    
+    -- Set source entity data frame names
+    UPDATE bd
+    SET bd.SourceAliasNM = se.DataFrameNM
+    FROM EDWAdmin.CatalystAdmin.BindingDependencyNewBASE AS bd
+         INNER JOIN EDWAdmin.CatalystAdmin.EntityBASE AS e
+         ON e.EntityID = bd.SourceEntityID
+         INNER JOIN @SourceEntities AS se
+         ON e.EntityNM = se.EntityNM
+    WHERE bd.BindingId = @BindingId; 
+"@    
+ 
+    runSql $sql
+
+    return $Return
+
+}
+
+function installRODBCPackage(){
+    # run via R
+    # install.packages("RODBC",dependencies=TRUE)
+}
+
+# EWS datamart = 33
+function getEntitiesInDatamart($datamartId) {
+    [hashtable]$Return = @{}
+
+    $api = "${metadataUrl}/v1/DataMarts($datamartId)/Entities"
+    $result = Invoke-Restmethod $api -UseDefaultCredentials
+    Write-Host "Entities"
+    ForEach ($def in $result.value) {
+        Write-Host "$($def.Id) $($def.EntityName)"
+    }    
+    return $Return
+}
+
+# $entityName = "EWSSummaryPatientRisk"
+function getEntityInDatamartByName($datamartId, $entityName) {
+    [hashtable]$Return = @{}
+
+    $api = "${metadataUrl}/v1/DataMarts($datamartId)/Entities"+ '?$filter=EntityName eq ' + "'$entityName'"
+    $result = Invoke-Restmethod $api -UseDefaultCredentials
+
+    $Return.Id = $result.value.Id
+    $Return.EntityName = $result.value.EntityName
+
+    return $Return
+}
+
+# EWS datamart = 33
+# EWSSummaryPatientRisk = 1844
+# getBindingsForEntity -datamartId 33 -entityId 1844
+function getBindingsForEntity($datamartId, $entityId) {
+    [hashtable]$Return = @{}
+
+    $api = "${metadataUrl}/v1/DataMarts($dataMartId)/Entities($entityId)/SourceBindings"
+    $result = Invoke-Restmethod $api -UseDefaultCredentials
+    Write-Host "Bindings"
+    ForEach ($def in $result.value) {
+        Write-Host "$($def.Id) $($def.Name)"
+    }    
+    return $Return
+}
+
+# $result = getFirstBindingForEntity -datamartId 33 -entityId 1844
+# $result.BindingId = 1361
+function getFirstBindingForEntity($datamartId, $entityId) {
+    [hashtable]$Return = @{}
+
+    $api = "${metadataUrl}/v1/DataMarts($dataMartId)/Entities($entityId)/SourceBindings"
+    $result = Invoke-Restmethod $api -UseDefaultCredentials
+
+    $Return.BindingId = $result.value[0].Id
+    $Return.BindingName = $result.value[0].Name
+    $Return.DestinationEntityId = $result.value[0].DestinationEntityId
+
+    return $Return
 }
